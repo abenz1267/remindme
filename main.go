@@ -138,10 +138,9 @@ func parseTimeAt(val string) time.Time {
 		panic(err)
 	}
 
-	now = now.Add(time.Hour * time.Duration(hour))
-	now = now.Add(time.Minute * time.Duration(minute))
+	t := time.Date(now.Year(), now.Month(), now.Day(), hour, minute, 0, 0, now.Location())
 
-	return now
+	return t
 }
 
 func parseTimeIn(val string) time.Time {
