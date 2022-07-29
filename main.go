@@ -2,11 +2,10 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
+	"net"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -15,15 +14,14 @@ import (
 	"golang.org/x/exp/slices"
 )
 
-var formats = map[string]string{
-	"h": "4",
-	"m": "0",
-}
-
 type Reminder struct {
 	Time    time.Time `json:"time"`
 	Message string    `json:"message"`
 }
+
+const SockAddr = "remindmesocket"
+
+var data = []Reminder{}
 
 func main() {
 	args := os.Args[1:]
@@ -35,14 +33,24 @@ func main() {
 			Message: strings.Join(args[2:], " "),
 		}
 
-		addToJson(r)
+		b, err := json.Marshal(&r)
+		if err != nil {
+			log.Panic(err)
+		}
+
+		send(b)
 	case "at":
 		r := Reminder{
 			Time:    parseTimeAt(args[1]),
 			Message: strings.Join(args[2:], " "),
 		}
 
-		addToJson(r)
+		b, err := json.Marshal(&r)
+		if err != nil {
+			log.Panic(err)
+		}
+
+		send(b)
 	case "--watch":
 		watch()
 	default:
@@ -50,148 +58,68 @@ func main() {
 	}
 }
 
+func send(b []byte) {
+	conn, err := net.Dial("unix", SockAddr)
+	if err != nil {
+		log.Panic(err)
+	}
+	defer conn.Close()
+
+	_, err = conn.Write(b)
+	if err != nil {
+		log.Panic(err)
+	}
+}
+
 func watch() {
-	deleteOld()
+	os.Remove(SockAddr)
+
+	go receive()
 
 	for {
-		time.Sleep(time.Minute * 1)
+		time.Sleep(time.Second * 1)
 
-		_, file := paths()
-
-		b, err := os.ReadFile(file)
-		if err != nil {
-			panic(err)
-		}
-
-		rs := []Reminder{}
-
-		err = json.Unmarshal(b, &rs)
-		if err != nil {
-			panic(err)
-		}
-
-		for k, v := range rs {
-			now := time.Now()
-
-			if now.After(v.Time) || now.Equal(v.Time) {
-				err := beeep.Notify("Remindme", v.Message, "assets/information.png")
-				if err != nil {
-					log.Println(err)
-				}
-
-				rs = slices.Delete(rs, k, k+1)
-			}
-		}
-
-		b, err = json.Marshal(&rs)
-		if err != nil {
-			panic(err)
-		}
-
-		err = os.WriteFile(file, b, PermFile)
-		if err != nil {
-			panic(err)
-		}
-	}
-}
-
-func deleteOld() {
-	_, file := paths()
-
-	b, err := os.ReadFile(file)
-	if err != nil {
-		panic(err)
-	}
-
-	rs := []Reminder{}
-
-	err = json.Unmarshal(b, &rs)
-	if err != nil {
-		panic(err)
-	}
-
-	for k, v := range rs {
 		now := time.Now()
 
-		if now.After(v.Time) {
-			rs = slices.Delete(rs, k, k+1)
+		for k, v := range data {
+			if now.After(v.Time) {
+				err := beeep.Notify("Reminder", v.Message, "assets/information.png")
+				if err != nil {
+					panic(err)
+				}
+
+				data = slices.Delete(data, k, k+1)
+			}
 		}
-	}
-
-	b, err = json.Marshal(&rs)
-	if err != nil {
-		panic(err)
-	}
-
-	err = os.WriteFile(file, b, PermFile)
-	if err != nil {
-		panic(err)
 	}
 }
 
-const (
-	PermFile   = 0o644
-	PermFolder = 0o755
-)
-
-func paths() (string, string) {
-	home, err := os.UserHomeDir()
+func receive() {
+	l, err := net.ListenUnix("unix", &net.UnixAddr{Name: SockAddr})
 	if err != nil {
 		panic(err)
 	}
+	defer l.Close()
 
-	dir := filepath.Join(home, ".remindme")
-	file := filepath.Join(dir, "reminders.json")
-
-	return dir, file
-}
-
-func addToJson(r Reminder) {
-	dir, file := paths()
-
-	if _, err := os.Stat(dir); errors.Is(err, os.ErrNotExist) {
-		err := os.Mkdir(dir, PermFolder)
+	for {
+		conn, err := l.AcceptUnix()
 		if err != nil {
-			panic(err)
-		}
-	}
-
-	if _, err := os.Stat(file); errors.Is(err, os.ErrNotExist) {
-		rs := []Reminder{}
-
-		b, err := json.Marshal(&rs)
-		if err != nil {
-			panic(err)
+			log.Panic(err)
 		}
 
-		err = os.WriteFile(file, b, PermFile)
+		b := make([]byte, 1024)
+		i, err := conn.Read(b)
 		if err != nil {
-			panic(err)
+			log.Panic(err)
 		}
-	}
 
-	rs := []Reminder{}
+		var r Reminder
+		err = json.Unmarshal(b[:i], &r)
+		if err != nil {
+			log.Panic(err)
+		}
 
-	b, err := os.ReadFile(file)
-	if err != nil {
-		panic(err)
-	}
-
-	err = json.Unmarshal(b, &rs)
-	if err != nil {
-		panic(err)
-	}
-
-	rs = append(rs, r)
-
-	b, err = json.Marshal(&rs)
-	if err != nil {
-		panic(err)
-	}
-
-	err = os.WriteFile(file, b, PermFile)
-	if err != nil {
-		panic(err)
+		data = append(data, r)
 	}
 }
 
@@ -228,6 +156,18 @@ func parseTimeIn(val string) time.Time {
 
 		now := time.Now()
 		now = now.Add(time.Minute * time.Duration(toAdd))
+
+		return now
+	case strings.HasSuffix(val, "s"):
+		val = strings.TrimSuffix(val, "s")
+
+		toAdd, err := strconv.Atoi(val)
+		if err != nil {
+			panic(err)
+		}
+
+		now := time.Now()
+		now = now.Add(time.Second * time.Duration(toAdd))
 
 		return now
 	default:
