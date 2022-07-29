@@ -19,7 +19,7 @@ type Reminder struct {
 	Message string    `json:"message"`
 }
 
-const SockAddr = "remindmesocket"
+const SockAddr = "/tmp/remindme.sock"
 
 var data = []Reminder{}
 
