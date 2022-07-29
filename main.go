@@ -124,12 +124,24 @@ func receive() {
 }
 
 func parseTimeAt(val string) time.Time {
-	time, err := time.Parse("15:04", val)
+	now := time.Now()
+
+	parts := strings.Split(val, ":")
+
+	hour, err := strconv.Atoi(parts[0])
 	if err != nil {
 		panic(err)
 	}
 
-	return time
+	minute, err := strconv.Atoi(parts[1])
+	if err != nil {
+		panic(err)
+	}
+
+	now = now.Add(time.Hour * time.Duration(hour))
+	now = now.Add(time.Minute * time.Duration(minute))
+
+	return now
 }
 
 func parseTimeIn(val string) time.Time {
