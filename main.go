@@ -83,9 +83,16 @@ func watch() {
 
 		for k, v := range data {
 			if now.After(v.Time) {
-				err := beeep.Notify("Reminder", v.Message, "assets/information.png")
-				if err != nil {
-					panic(err)
+				if strings.HasSuffix(v.Message, "!") {
+					err := beeep.Alert("Reminder", strings.TrimSuffix(v.Message, "!"), "assets/warning.png")
+					if err != nil {
+						panic(err)
+					}
+				} else {
+					err := beeep.Notify("Reminder", v.Message, "assets/information.png")
+					if err != nil {
+						panic(err)
+					}
 				}
 
 				data = slices.Delete(data, k, k+1)
