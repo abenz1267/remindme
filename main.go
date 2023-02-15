@@ -150,44 +150,34 @@ func parseTimeAt(val string) time.Time {
 	return t
 }
 
+var unitMap = map[string]time.Duration{
+	"h": time.Hour,
+	"m": time.Minute,
+	"s": time.Second,
+}
+
+func addTime(val, unit string) time.Time {
+	val = strings.TrimSuffix(val, unit)
+
+	toAdd, err := strconv.Atoi(val)
+	if err != nil {
+		panic(err)
+	}
+
+	now := time.Now()
+	now = now.Add(unitMap[unit] * time.Duration(toAdd))
+
+	return now
+}
+
 func parseTimeIn(val string) time.Time {
 	switch {
 	case strings.HasSuffix(val, "h"):
-		val = strings.TrimSuffix(val, "h")
-
-		toAdd, err := strconv.Atoi(val)
-		if err != nil {
-			panic(err)
-		}
-
-		now := time.Now()
-		now = now.Add(time.Hour * time.Duration(toAdd))
-
-		return now
+		return addTime(val, "h")
 	case strings.HasSuffix(val, "m"):
-		val = strings.TrimSuffix(val, "m")
-
-		toAdd, err := strconv.Atoi(val)
-		if err != nil {
-			panic(err)
-		}
-
-		now := time.Now()
-		now = now.Add(time.Minute * time.Duration(toAdd))
-
-		return now
+		return addTime(val, "m")
 	case strings.HasSuffix(val, "s"):
-		val = strings.TrimSuffix(val, "s")
-
-		toAdd, err := strconv.Atoi(val)
-		if err != nil {
-			panic(err)
-		}
-
-		now := time.Now()
-		now = now.Add(time.Second * time.Duration(toAdd))
-
-		return now
+		return addTime(val, "s")
 	default:
 		panic("can't parse time")
 	}
