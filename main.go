@@ -6,59 +6,83 @@ import (
 	"log"
 	"net"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/gen2brain/beeep"
 	"golang.org/x/exp/slices"
 )
 
 type Reminder struct {
-	Time    time.Time `json:"time"`
-	Message string    `json:"message"`
+	Time        time.Time `json:"time"`
+	Message     string    `json:"message"`
+	IsPomodoro  bool      `json:"is_pomodoro"`
+	PomodoroNum int       `json:"pomodoro_num"`
 }
 
-const SockAddr = "/tmp/remindme.sock"
+const (
+	SockAddr           = "/tmp/remindme.sock"
+	UrgencyLow         = "low"
+	UrgencyNormal      = "normal"
+	UrgencyCritical    = "critical"
+	BreakMsg           = "5 minute break"
+	BreakFinishedMsg   = "break finished"
+	LongBreakMsg       = "20 minute break"
+	PomodoroStoppedMsg = "stopped"
+	PomodoroStartedMsg = "started"
+)
 
-var data = []Reminder{}
+var (
+	data   = []Reminder{}
+	pCount = 0
+	pNum   = 0
+)
 
 func main() {
 	args := os.Args[1:]
 
 	switch args[0] {
 	case "in":
-		r := Reminder{
+		send(Reminder{
 			Time:    parseTimeIn(args[1]),
 			Message: strings.Join(args[2:], " "),
-		}
-
-		b, err := json.Marshal(&r)
-		if err != nil {
-			log.Panic(err)
-		}
-
-		send(b)
+		})
 	case "at":
-		r := Reminder{
+		send(Reminder{
 			Time:    parseTimeAt(args[1]),
 			Message: strings.Join(args[2:], " "),
+		})
+	case "p":
+		switch args[1] {
+		case "start":
+			send(Reminder{
+				Time:       time.Now(),
+				Message:    PomodoroStartedMsg,
+				IsPomodoro: true,
+			})
+		case "stop":
+			send(Reminder{
+				Time:       time.Now(),
+				Message:    PomodoroStoppedMsg,
+				IsPomodoro: true,
+			})
+		default:
+			fmt.Println("use 'start' or 'stop'")
 		}
-
-		b, err := json.Marshal(&r)
-		if err != nil {
-			log.Panic(err)
-		}
-
-		send(b)
 	case "--watch":
 		watch()
 	default:
-		fmt.Println("use 'in' or 'at'")
+		fmt.Println("use 'in' or 'at'. Pomodoro with 'p start/stop'")
 	}
 }
 
-func send(b []byte) {
+func send(r Reminder) {
+	b, err := json.Marshal(&r)
+	if err != nil {
+		log.Panic(err)
+	}
+
 	conn, err := net.Dial("unix", SockAddr)
 	if err != nil {
 		log.Panic(err)
@@ -83,21 +107,80 @@ func watch() {
 
 		for k, v := range data {
 			if now.After(v.Time) {
-				if strings.HasSuffix(v.Message, "!") {
-					err := beeep.Alert("Reminder", strings.TrimSuffix(v.Message, "!"), "assets/warning.png")
-					if err != nil {
-						panic(err)
+				switch v.Message {
+				case PomodoroStartedMsg:
+					if v.PomodoroNum == pNum {
+						pCount = 1
+
+						data = append(data, Reminder{
+							Time:        now.Add(time.Second * 25),
+							Message:     BreakMsg,
+							IsPomodoro:  true,
+							PomodoroNum: pNum,
+						})
+
+						notify("Pomodoro", v.Message, UrgencyNormal)
 					}
-				} else {
-					err := beeep.Notify("Reminder", v.Message, "assets/information.png")
-					if err != nil {
-						panic(err)
+				case BreakMsg:
+					if v.PomodoroNum == pNum {
+						pause := 5
+						message := BreakMsg
+
+						if pCount == 4 {
+							message = LongBreakMsg
+							pause = 20
+						}
+
+						data = append(data, Reminder{
+							Time:        now.Add(time.Second * time.Duration(pause)),
+							Message:     BreakFinishedMsg,
+							IsPomodoro:  true,
+							PomodoroNum: v.PomodoroNum,
+						})
+
+						notify("Pomodoro", message, UrgencyCritical)
+					}
+				case BreakFinishedMsg:
+					if v.PomodoroNum == pNum {
+						pCount++
+
+						if pCount > 4 {
+							pCount = 1
+						}
+
+						data = append(data, Reminder{
+							Time:        now.Add(time.Second * 25),
+							Message:     BreakMsg,
+							IsPomodoro:  true,
+							PomodoroNum: v.PomodoroNum,
+						})
+
+						notify("Pomodoro", v.Message, UrgencyCritical)
+					}
+				case PomodoroStoppedMsg:
+					pNum++
+					notify("Pomodoro", v.Message, UrgencyNormal)
+				default:
+					if strings.HasSuffix(v.Message, "!") {
+						notify("Reminder", strings.TrimSuffix(v.Message, "!"), UrgencyCritical)
+					} else {
+						notify("Reminder", v.Message, UrgencyNormal)
 					}
 				}
 
 				data = slices.Delete(data, k, k+1)
 			}
 		}
+	}
+}
+
+// urgency: low, normal, critical
+func notify(title, message, urgency string) {
+	cmd := exec.Command("notify-send", title, message, fmt.Sprintf("--urgency=%s", urgency), "--app-name=RemindMe")
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Panic(string(out))
 	}
 }
 
