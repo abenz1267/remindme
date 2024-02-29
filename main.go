@@ -113,7 +113,7 @@ func watch() {
 						pCount = 1
 
 						data = append(data, Reminder{
-							Time:        now.Add(time.Second * 25),
+							Time:        now.Add(time.Minute * 25),
 							Message:     BreakMsg,
 							IsPomodoro:  true,
 							PomodoroNum: pNum,
@@ -132,7 +132,7 @@ func watch() {
 						}
 
 						data = append(data, Reminder{
-							Time:        now.Add(time.Second * time.Duration(pause)),
+							Time:        now.Add(time.Minute * time.Duration(pause)),
 							Message:     BreakFinishedMsg,
 							IsPomodoro:  true,
 							PomodoroNum: v.PomodoroNum,
@@ -149,7 +149,7 @@ func watch() {
 						}
 
 						data = append(data, Reminder{
-							Time:        now.Add(time.Second * 25),
+							Time:        now.Add(time.Minute * 25),
 							Message:     BreakMsg,
 							IsPomodoro:  true,
 							PomodoroNum: v.PomodoroNum,
