@@ -7,7 +7,7 @@
 - `remindme p <start/stop>`
 - `remindme --watch`, starts notifier
 
-Adding a "!" suffix to the message will create an alert instead of a normal notification.
+Adding a "!" suffix to the message will create an urgent notification instead of a normal one.
 
 ## Pomodoro
 
