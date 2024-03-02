@@ -43,6 +43,8 @@ func main() {
 	args := os.Args[1:]
 
 	switch args[0] {
+	case "notify":
+		duck()
 	case "in":
 		send(Reminder{
 			Time:    parseTimeIn(args[1]),
@@ -263,5 +265,22 @@ func parseTimeIn(val string) time.Time {
 		return addTime(val, "s")
 	default:
 		panic("can't parse time")
+	}
+}
+
+func duck() {
+	reduce := exec.Command("playerctl", "--all-players", "volume", "0.1")
+	reduce.Run()
+
+	play := exec.Command("play", "/usr/share/sounds/freedesktop/stereo/message.oga")
+	play.Run()
+
+	initial := 0.1
+
+	for initial < 1.0 {
+		time.Sleep(time.Millisecond * 200)
+		initial += 0.1
+		raise := exec.Command("playerctl", "--all-players", "volume", fmt.Sprintf("%f", initial))
+		raise.Run()
 	}
 }
