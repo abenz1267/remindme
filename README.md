@@ -1,5 +1,9 @@
 # remindme - quick n stupid desktop reminders and simple pomodoro timer
 
+## Install
+
+Arch: `yay -S remindme-bin`
+
 ## Usage
 
 - `remindme in <duration><m/h> <message>`, example: `remindme in 10m This is a message`
